@@ -180,11 +180,19 @@ After presenting the briefing, apply filing rules to recurring automated senders
    - Tag only, leave in inbox (manual review needed).
    - Note: Axcient x360Cloud digests and org-attention notices do NOT match — no rule defined yet.
 
-10. **Teams message notifications** (sender `no-reply@teams.mail.microsoft`):
+10. **Sophos client daily reports** (sender `wmt.notifications@gmail.com`, subject matches "Events - Daily", "Traffic Dashboard - Daily", or "SSL VPN - Daily"):
+    - **This rule requires opening the email** — matching can't be done from subject/sender alone, since the client is identified only by the PDF attachment filename. Call `read_resource` on the email to get the attachment filename before deciding.
+    - If the PDF attachment filename **starts with "MMC"** (case-insensitive, any separator or none — e.g. `MMC_AUTH_EVENTS_DAILY.pdf`, `MMC_TRAFFIC_DASHBOARD.pdf`, `MMC SSL VPN.pdf` all match): tag, move to **Clients > MMC > _SOPHOS REPORTS** (folder ID: `AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwAEifQaawAAAA==`).
+    - If the PDF attachment filename **starts with "WMT"** (case-insensitive, any separator or none — e.g. `WMT_AUTH_EVENTS.pdf`): tag, move to **_WMT > COMPLIANCE** (folder ID: `AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwABPCPpnQAAAA==`). Note: this is the COMPLIANCE folder nested under _WMT — not the separate top-level COMPLIANCE folder that also exists in the mailbox.
+    - If the PDF attachment filename starts with a **different, unrecognized** prefix (any client other than "MMC" or "WMT"): do NOT move. Tag Claude Auto, leave in inbox, and surface in the briefing as an unrecognized client prefix that needs a new rule — do not guess a destination folder for it.
+    - Do not match on subject or recipient alone — always confirm via the actual attachment filename, since these reports are otherwise identical across clients.
+    - Note: this is distinct from `do-not-reply@central.sophos.com` "[HIGH] Alert for Sophos Central" real-time alert emails — those are a separate, still-undefined case and fall through to Rule 12.
+
+11. **Teams message notifications** (sender `no-reply@teams.mail.microsoft`):
     - Read and analyze content FIRST; include relevant details in the briefing (💬 Teams Highlights section).
     - Then tag Claude Auto and move to Deleted Items via `outlook_trash_thread` (soft delete — recoverable, not permanent). Never trash before the content has been read and reflected in the briefing.
 
-11. **Any other sender** → do not touch (no rule defined; surface in briefing and confirm with user before adding a rule).
+12. **Any other sender** → do not touch (no rule defined; surface in briefing and confirm with user before adding a rule).
 
 **Quick reference — destinations:**
 
@@ -194,9 +202,11 @@ After presenting the briefing, apply filing rules to recurring automated senders
 | _TO REVIEW > NEWS | 3, 5, 6 |
 | VENDORS > Comcast | 7 |
 | VENDORS > Bitwarden | 8 |
-| Tag only, stays in Inbox | 2 (with "REPLY ABOVE"), 9 |
-| Deleted Items (soft) | 10 |
-| Untouched | 11 |
+| Clients > MMC > _SOPHOS REPORTS | 10 (MMC prefix) |
+| _WMT > COMPLIANCE | 10 (WMT prefix) |
+| Tag only, stays in Inbox | 2 (with "REPLY ABOVE"), 9, 10 (unrecognized prefix) |
+| Deleted Items (soft) | 11 |
+| Untouched | 12 |
 
 ### 5. Create Summary Email and Deliver to Inbox
 
