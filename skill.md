@@ -16,8 +16,9 @@ compatibility: "Requires Microsoft 365 connector (Outlook + Teams)"
 Prepares the user for their day by summarizing their inbox, today's calendar, and recent Teams messages.
 
 **Implementation notes for Claude:**
-- This skill is best run with **Sonnet 5** for accuracy and reliability in pattern-matching complex email rules (sender/subject/body matching across 10 rules).
-- The filing workflow (step 4) is **email-first, rule-ordered**: pull inbox once, process each email through rules 1–10 in order, apply first match, move to next email. This ensures every email is checked against every rule systematically.
+- This skill is best run with **Sonnet 5** for accuracy and reliability in pattern-matching complex email rules (sender/recipient/subject/body matching across the full rule set).
+- The filing workflow (step 4) is **email-first, rule-ordered**: pull the inbox (paginating until exhausted), then process each email through every defined rule in order, apply the first match, and move to the next email. This ensures every email is checked against every rule systematically.
+- Rules are ordered **most specific first** so a broad rule never shadows a narrow one (e.g. CUSTOMER REPLY REMINDER precedes the general Syncro ticket rule, since both come from `support@westmaintech.com`).
 - **Processing guarantee**: batch tag and move operations atomically; every email gets evaluated; no rule is skipped.
 - Maintain a filing registry (persistent across runs) to prevent duplicate processing and enable tracking of reminder fires.
 - Always include the filing summary footer so the user can verify what was processed and spot any errors. Report counts by rule.
@@ -121,10 +122,10 @@ After presenting the briefing, apply filing rules to recurring automated senders
 
 **Filing Workflow:**
 
-1. **Pull inbox** — search inbox from midnight today, limit 25, newest first. Store full results (sender, subject, body snippet, messageId).
+1. **Pull inbox — paginate until exhausted.** Search inbox from midnight today, limit 25, newest first. The API caps results at 25 per call, so if the response indicates more results exist (`moreResults: true`, or a `totalResultCount` higher than what you received), call again with `offset` 25, then 50, and so on until every email in the window has been retrieved. **Do not process a partial set** — emails past the first 25 are silently skipped otherwise, which has caused missed filings before. Store full results (sender, recipient, subject, body snippet, messageId).
 
 2. **Process each email in order** — for each email in the results:
-   - Check rules 1–10 in sequence (priority order below)
+   - Check **every defined rule** in sequence (priority order below), starting at rule 1 and continuing until a match is found or the rule list is exhausted
    - On **first rule match**, immediately apply that rule's action (tag ± move)
    - Log the result: `{ messageId, rule matched, action taken, timestamp }`
    - Move to next email
@@ -138,51 +139,64 @@ After presenting the briefing, apply filing rules to recurring automated senders
 
 **Error handling:** If tagging fails for an email, do not attempt to move it. Log as error and skip to next email. If a move fails after successful tagging, log that too (email is already tagged/flagged even if move didn't complete).
 
-**Processing guarantee:** Every email in the inbox is checked against all 10 rules in order until a match is found. No email is skipped; no rule is bypassed.
+**Processing guarantee:** Every email in the inbox — across all pagination pages — is checked against every defined rule in order until a match is found. No email is skipped; no rule is bypassed. When rules are added or removed, this guarantee still means "all of them," so do not rely on a hardcoded rule count anywhere in execution.
 
-**Defined rules (auto-executed, in priority order):**
+**Defined rules (auto-executed, in priority order — most specific first):**
 
-1. **Syncro ticket reply notifications** (sender `no-reply@syncromsp.com` OR `support@westmaintech.com`, subject contains "A Ticket Reply came in"):
-   - If body contains **"REPLY ABOVE THIS LINE TO SEND A RESPONSE"** → tag only, leave in inbox.
-   - Otherwise → tag, move to **_SYNCRO ALERTS**.
-
-2. **Syncro Community digests** (sender `notifications@syncro.discoursemail.com`, subject "[Syncro Community] Summary"):
-   - Scan body for security/RMM keywords; mention in briefing FYI if found.
-   - Tag, move to **_TO REVIEW > NEWS** folder.
-
-3. **CUSTOMER REPLY REMINDER alerts** (sender `support@westmaintech.com`, subject "CUSTOMER REPLY REMINDER", body contains "NEEDS IMMEDIATE ATTENTION"):
+1. **CUSTOMER REPLY REMINDER alerts** (sender `support@westmaintech.com`, subject contains "CUSTOMER REPLY REMINDER"):
    - Scan body for ticket #, customer/contact name, reply content.
    - Check filing registry: count how many times this ticket's reminder has fired in last 7 days; surface count + details in briefing as flagged item.
    - Tag, move to **_SYNCRO ALERTS**.
+   - *Ordered first because it is the most specific `support@westmaintech.com` case — Rule 2 would otherwise shadow it.*
 
-4. **WMT internal ticket copies** (sender `support@westmaintech.com`, sent to `tech@westmaintech.com`, subject contains ticket reference like "j&j" or "Website form Issue"):
-   - If body contains **"REPLY ABOVE THIS LINE TO SEND A RESPONSE"** → tag only, leave in inbox.
-   - Otherwise → out of scope, do not touch (skip to next email).
+2. **Syncro ticket correspondence** (sender `no-reply@syncromsp.com` OR `support@westmaintech.com`, matching ANY of: subject contains "A Ticket Reply came in"; subject contains "(message id:"; recipient is `tech@westmaintech.com`):
+   - If body contains **"REPLY ABOVE THIS LINE TO SEND A RESPONSE"** → tag only, leave in inbox (an open thread the user may need to answer).
+   - Otherwise → tag, move to **_SYNCRO ALERTS**.
+   - *Match on sender + recipient + body string. Do NOT match on specific past subject text (e.g. "j&j", "Website form Issue") — those were examples, not a pattern, and matching them produces false negatives on new ticket titles.*
 
-5. **Axcient case emails** (sender `support@axcient.com`, subject contains "Case #"):
-   - Tag only, leave in inbox (manual review needed).
+3. **Syncro Community digests** (sender `notifications@syncro.discoursemail.com`, subject "[Syncro Community] Summary"):
+   - Scan body for security/RMM keywords; mention in briefing FYI if found.
+   - Tag, move to **_TO REVIEW > NEWS**.
+
+4. **Syncro "Tickets Due Tomorrow"** (sender `no-reply@syncromsp.com`, subject "Tickets Due Tomorrow"):
+   - Tag, move to **_SYNCRO ALERTS**.
+
+5. **Syncro webinar/promotional** (sender `webinars@syncrosecure.com`):
+   - Tag, move to **_TO REVIEW > NEWS**.
 
 6. **Blackpoint Cyber marketing** (sender `marketing@blackpointcyber.com`):
    - Tag, move to **_TO REVIEW > NEWS**.
+   - Note: `support@blackpointcyber.com` (renewals, billing reports) does NOT match — no rule defined yet.
 
-7. **Syncro webinar/promotional** (sender `webinars@syncrosecure.com`):
-   - Tag, move to **_TO REVIEW > NEWS**.
-
-8. **Syncro "Tickets Due Tomorrow"** (sender `no-reply@syncromsp.com`, subject "Tickets Due Tomorrow"):
-   - Tag, move to **_SYNCRO ALERTS**.
-
-9. **Comcast payment notifications** (sender `online.communications@alerts.comcast.net`, subject contains "payment"):
+7. **Comcast payment notifications** (sender `online.communications@alerts.comcast.net`, subject contains "payment"):
    - Tag, move to **VENDORS > Comcast**.
+   - Note: Comcast outage/service notices from `noreply@alerts.comcast.net` and non-payment subjects do NOT match — no rule defined yet.
 
-10. **Bitwarden invoices/receipts** (sender `no-reply@bitwarden.com` OR `invoice+statements@bitwarden.com`, subject contains "invoice" or "receipt"):
-    - Tag, move to **VENDORS > Bitwarden**.
-    - Note: other Bitwarden emails (login alerts, member confirmation requests) do NOT match this rule — only billing-related subjects.
+8. **Bitwarden invoices/receipts** (sender `no-reply@bitwarden.com` OR `invoice+statements@bitwarden.com`, subject contains "invoice" or "receipt"):
+   - Tag, move to **VENDORS > Bitwarden**.
+   - Note: other Bitwarden emails (login alerts, member confirmation requests) do NOT match — only billing-related subjects.
 
-11. **Teams message notifications** (sender `no-reply@teams.mail.microsoft`):
-    - Read and analyze content; include relevant details in the briefing (💬 Teams Highlights section).
-    - Tag Claude Auto, then move to Deleted Items via `outlook_trash_thread` (soft delete — recoverable, not permanent). Do this only after the content has been read and reflected in the briefing.
+9. **Axcient case emails** (sender `support@axcient.com`, subject contains "Case #"):
+   - Tag only, leave in inbox (manual review needed).
+   - Note: Axcient x360Cloud digests and org-attention notices do NOT match — no rule defined yet.
 
-12. **Any other sender** → do not touch (rules not yet defined; confirm with user first).
+10. **Teams message notifications** (sender `no-reply@teams.mail.microsoft`):
+    - Read and analyze content FIRST; include relevant details in the briefing (💬 Teams Highlights section).
+    - Then tag Claude Auto and move to Deleted Items via `outlook_trash_thread` (soft delete — recoverable, not permanent). Never trash before the content has been read and reflected in the briefing.
+
+11. **Any other sender** → do not touch (no rule defined; surface in briefing and confirm with user before adding a rule).
+
+**Quick reference — destinations:**
+
+| Destination | Rules |
+|---|---|
+| _SYNCRO ALERTS | 1, 2 (no "REPLY ABOVE"), 4 |
+| _TO REVIEW > NEWS | 3, 5, 6 |
+| VENDORS > Comcast | 7 |
+| VENDORS > Bitwarden | 8 |
+| Tag only, stays in Inbox | 2 (with "REPLY ABOVE"), 9 |
+| Deleted Items (soft) | 10 |
+| Untouched | 11 |
 
 ### 5. Create Summary Email and Deliver to Inbox
 
