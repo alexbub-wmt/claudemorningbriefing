@@ -159,11 +159,11 @@ After presenting the briefing, apply filing rules to recurring automated senders
 
 12. **Any other sender** → do not touch (rules not yet defined; confirm with user first).
 
-### 5. Create Summary Email Draft
+### 5. Create Summary Email and Deliver to Inbox
 
-After filing is complete, create an email draft for yourself as a self-reminder and save it to your Drafts folder.
+After filing is complete, create the briefing summary as a message and place it directly in your Inbox — not sent over the network, just created as a draft and then relocated into Inbox. This keeps the summary out of Drafts clutter and avoids any actual email send.
 
-**Draft content:**
+**Message content:**
 1. **Subject:** "Daily Briefing Summary — [date, e.g., Thursday, Aug 6, 2026]"
 2. **To:** alex@westmaintech.com
 3. **Body:** Condensed version of the briefing:
@@ -174,12 +174,12 @@ After filing is complete, create an email draft for yourself as a self-reminder 
    - Suggested focus areas (2–3 from the briefing)
 
 **Execution:**
-- Call `outlook_create_draft` with the above structure
-- Save to your Drafts folder (inbox name: Drafts)
-- Do NOT send automatically — user reviews and sends manually
-- Report in the footer that draft was created
+1. Call `outlook_create_draft` with the above structure (this creates the message in Drafts, same as before).
+2. Immediately call `outlook_modify_labels` on the newly created message ID, with `moveToFolderId` set to the **Inbox** folder ID (`AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwAAAgEMAAAA`). This is a folder move only — no network send, no email leaves the mailbox.
+3. **No `outlook_send_mail` call at any point.** This step never sends email — it only creates and relocates a message within the mailbox.
+4. Report in the footer that the summary was delivered to Inbox (not "draft created").
 
-**Draft footer note:** Include a timestamp ("Created by morning briefing at [time]") so you know when it was generated.
+**Footer note:** Include a timestamp ("Delivered to inbox by morning briefing at [time]") so you know when it was generated.
 
 ### 6. Filing summary footer & audit trail
 
