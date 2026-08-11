@@ -21,6 +21,7 @@ Prepares the user for their day by summarizing their inbox, today's calendar, an
 - **Processing guarantee**: batch tag and move operations atomically; every email gets evaluated; no rule is skipped.
 - Maintain a filing registry (persistent across runs) to prevent duplicate processing and enable tracking of reminder fires.
 - Always include the filing summary footer so the user can verify what was processed and spot any errors. Report counts by rule.
+- After the same-day briefing, run the extended 7-day lookback (Step 3.5) to surface unresolved items that scrolled out of the daily view — this is read-only and never triggers new filing actions.
 - Draft creation (step 5) happens after filing is complete. The draft is a self-reminder for the user and is **never sent automatically** — the user reviews and sends manually.
 
 ## Step-by-Step Workflow
@@ -75,10 +76,34 @@ For each notable email: sender name, subject, and a 1-sentence summary of what i
 Summarize notable messages or threads. Skip automated bot messages.
 If nothing notable: "No urgent Teams messages."
 
+**⏳ Long-Term Follow-Up** *(only if items found — see Step 3.5)*
+List items still open from the extended 7-day lookback that haven't been resolved. For each: sender/subject, how many days it's been sitting, and why it's still flagged (e.g., "3rd CUSTOMER REPLY REMINDER, ticket #47758, unresolved since Aug 8").
+If nothing found in the lookback: omit this section entirely (don't show an empty header).
+
 **🎯 Suggested Focus**
 Based on what you've seen, offer 2–3 bullet points on what the user might want to tackle first. Keep it practical, not generic.
 
 ---
+
+### 3.5 Extended lookback (up to 7 days)
+
+After the same-day briefing (Step 3) is built, run a second, separate check to catch items that scrolled out of the 24-hour window but are still unresolved.
+
+**Scope:** search Inbox and relevant filing-destination folders (e.g., _SYNCRO ALERTS) for items received in the **last 7 days** (not just today).
+
+**What counts as "still flagged for follow-up":**
+- A CUSTOMER REPLY REMINDER (or similar recurring alert) for a ticket that has fired multiple times across the 7-day window without an apparent resolution (check registry for repeat fires on the same ticket #).
+- Any email tagged "Claude Auto" and left in Inbox (per rules that say "tag only, leave in inbox") that is still present and unactioned after more than 1 day.
+- Any item explicitly called out as "action needed" in a prior day's briefing that is still present in Inbox today.
+
+**What does NOT count:**
+- Items already filed/moved out of Inbox as part of normal rule processing — those are handled, not "open."
+- Low-priority/newsletter-type items — this section is for things that need a decision or reply, not backlog volume.
+- Anything already surfaced in today's same-day 🔴 Action needed section — don't duplicate; only show items *older* than today that are still lingering.
+
+**Output:** populate the **⏳ Long-Term Follow-Up** section in the briefing (Step 3 format above) with what's found. If nothing qualifies, omit the section — don't force it to appear empty.
+
+**Note:** this lookback is read-only — it does not trigger new filing actions. If an old item matches a filing rule and simply wasn't processed in a prior run (a genuine miss), flag it in this section AND note it as needing manual reprocessing, but don't auto-file it silently as part of the lookback — that keeps this step from becoming a second uncontrolled filing pass.
 
 ## Tone & Style Guidelines
 
@@ -166,18 +191,26 @@ After filing is complete, create the briefing summary as a message and place it 
 **Message content:**
 1. **Subject:** "Daily Briefing Summary — [date, e.g., Thursday, Aug 6, 2026]"
 2. **To:** alex@westmaintech.com
-3. **Body:** Condensed version of the briefing:
-   - Today's meetings (times, titles, key attendees)
-   - Action items from email (top 3–5 from 🔴 section)
-   - FYI highlights (top 2–3 from 📌 section)
-   - Any flagged Syncro reminders (CUSTOMER REPLY REMINDER with ticket counts)
-   - Suggested focus areas (2–3 from the briefing)
+3. **Body:** Must include BOTH of the following sections, in this order — the filing footer is not optional and not chat-only, it must be part of the email body itself:
+   - **Briefing content:**
+     - Today's meetings (times, titles, key attendees)
+     - Action items from email (top 3–5 from 🔴 section)
+     - FYI highlights (top 2–3 from 📌 section)
+     - Any flagged Syncro reminders (CUSTOMER REPLY REMINDER with ticket counts)
+     - Long-term follow-up items from the 7-day lookback (Step 3.5), if any were found
+     - Suggested focus areas (2–3 from the briefing)
+   - **Filing Actions footer** (per Step 6 format below) — count of tags/moves by rule, any errors, registry confirmation, move verification results (per Step 7)
+   - **Delivery confirmation line:** "Delivered to inbox by morning briefing at [timestamp]"
 
 **Execution:**
-1. Call `outlook_create_draft` with the above structure (this creates the message in Drafts, same as before).
-2. Immediately call `outlook_modify_labels` on the newly created message ID, with `moveToFolderId` set to the **Inbox** folder ID (`AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwAAAgEMAAAA`). This is a folder move only — no network send, no email leaves the mailbox.
-3. **No `outlook_send_mail` call at any point.** This step never sends email — it only creates and relocates a message within the mailbox.
-4. Report in the footer that the summary was delivered to Inbox (not "draft created").
+1. Build the full body — briefing + filing footer + verification results + delivery timestamp — as ONE combined message before calling any tool. Do not create the message first and add the footer later; the footer's content (filing/verification results) is only known after Steps 4 and 7 run, so Step 5 must execute after Step 7, not before it.
+2. **Format the body as HTML** (`bodyType: "html"`), matching the same visual structure as the chat briefing — emoji section headers (🔴 Action needed, 📌 FYI, 🗃️ Low priority, 💬 Teams, 🎯 Suggested Focus, 📂 Filing actions, 🔍 Move verification), bullet lists (`<ul><li>`), and bold (`<strong>`) for emphasis. Do not send as plain text — plain text strips the section structure and makes the email harder to scan than the chat version.
+3. Call `outlook_create_draft` with the combined HTML body (this creates the message in Drafts).
+4. Immediately call `outlook_modify_labels` on the newly created message ID, with `moveToFolderId` set to the **Inbox** folder ID (`AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwAAAgEMAAAA`). This is a folder move only — no network send, no email leaves the mailbox.
+5. **No `outlook_send_mail` call at any point.** This step never sends email — it only creates and relocates a message within the mailbox.
+6. Confirm in the chat response that the summary (including footer) was delivered to Inbox.
+
+**Note on step order:** Because the filing footer must be part of the email body, Step 5 (create + deliver message) must run AFTER Step 4 (filing) and Step 7 (verification) are complete — not concurrently, and not before. The chat-visible briefing can still be presented early for the user's immediate reading, but the emailed copy is only created once all filing/verification data exists to populate its footer.
 
 **Footer note:** Include a timestamp ("Delivered to inbox by morning briefing at [time]") so you know when it was generated.
 
