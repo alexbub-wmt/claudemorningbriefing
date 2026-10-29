@@ -65,21 +65,36 @@ chat_message_search(query="*", afterDateTime="3 days ago", limit=50)
 
 ### 3. Synthesize the briefing
 
-Built **after** Steps 4, 7 and 3.5 are complete (see execution order). Structure it as a clear, scannable briefing. Use this format:
+Built **after** Steps 4, 7 and 3.5 are complete (see execution order).
+
+Everything gathered this run — inbox, calendar, Teams, Unifi alerts, Syncro tickets — is **one pool**. Rank it first, then list it.
+
+**The ranking test.** An item belongs in 🔴 Action needed if either is true:
+- **Waiting makes it worse** — the damage, cost, exposure or disruption grows the longer it sits.
+- **Someone is blocked on you** — a person or a job cannot move until you answer or act.
+
+Apply this test to every item, whatever its source. Judge it by what it actually describes, not by which section it arrived in, what words it uses, or whether it came as an email. **Do not keep a list of important categories.** Something you have never seen before can be the most important item of the run, and a familiar-looking item can be routine. If you can state why waiting costs something, it qualifies; if you cannot, it does not.
+
+Order Action needed worst-first by the same test. An item that qualifies is listed there **once**, and its inventory section cross-references it ("see Action needed") rather than repeating it.
+
+Use this format:
 
 ---
 
 ## 🌅 Here's your day at a glance.
+
+**🔴 Action needed** *(ranked worst-first, any source)*
+One line each: what it is, where it came from (ticket #, sender, site), and what is waiting on you. Say plainly why it is here — what gets worse, or who is blocked.
+If nothing qualifies: "Nothing needs action right now."
 
 **📅 Today's Meetings** *(chronological)*
 List each meeting with: time, title, attendees (shortened), and location/link if present.
 Flag any meetings in the next 1–2 hours as "⚡ Coming up soon."
 If no meetings: "You have a clear calendar today."
 
-**📬 Inbox Highlights** *(prioritized)*
-Group into:
-- 🔴 **Action needed** — emails requiring a reply or decision (include flagged CUSTOMER REPLY REMINDERs with 7-day ticket counts)
-- 📌 **FYI / notable** — important updates, announcements, things to be aware of (include Rule 3 keyword hits and unrecognized Rule 10 prefixes)
+**📬 Inbox Highlights**
+Everything from the inbox that is not already in Action needed:
+- 📌 **FYI / notable** — updates, announcements, things to be aware of (include Rule 3 keyword hits and unrecognized Rule 10 prefixes)
 - 🗃️ **Low priority** — newsletters, automated notifications (mention count only, don't list)
 
 For each notable email: sender name, subject, and a 1-sentence summary of what it's about.
@@ -89,21 +104,20 @@ Summarize notable messages or threads from the Step 1 Teams search and Rule 11 n
 If nothing notable: "No urgent Teams messages."
 
 **🌐 Unifi Alerts** *(last 8 hours)*
-Group by customer site. Prefix active/unresolved alerts with ⚠️ and bold the site name; prefix offline→reconnect pairs and other closed items with ✅ and give the duration. Put anything still unresolved — a device still offline, a WiFi impersonation alert — in 🔴 Action needed as well.
+Full inventory, grouped by customer site. Prefix anything with no resolution ⚠️ and bold the site; prefix resolved items ✅ and give the duration. An offline paired with its reconnect is one resolved line.
 If nothing: "No Unifi alerts in the last 8 hours."
 
 **🎫 New Syncro Tickets** *(last 8 hours)*
-Group by customer, customer name bolded on its own line, then one bullet per ticket: `#XXXXX — Subject (Type · Time)`. Add an indented `↳ Update:` line for any ticket with activity since it was opened.
+Full inventory, grouped by customer, customer name bolded on its own line, then one bullet per ticket: `#XXXXX — Subject (Type · Time)`. Add an indented `↳ Update:` line for any ticket with activity since it was opened.
 Close with a count line: "N tickets across M customers."
 If nothing: "No new tickets in the last 8 hours."
-Do not repeat a ticket here that already appears in 🔴 Action needed as a CUSTOMER REPLY REMINDER — cross-reference it instead (e.g. "see Action needed").
 
 **⏳ Long-Term Follow-Up** *(only if items found — see Step 3.5)*
 List items still open from the extended 7-day lookback. For each: sender/subject, how many days it's been sitting, and why it's still flagged (e.g., "Axcient Case #12345, tagged, in Inbox 3 days").
 If nothing found in the lookback: omit this section entirely (don't show an empty header).
 
 **🎯 Suggested Focus**
-Based on what you've seen, offer 2–3 bullet points on what the user might want to tackle first. Keep it practical, not generic.
+2–3 bullets on what to tackle first and in what order, drawn from Action needed. This is for sequencing only — never use it to raise something that should have been in Action needed.
 
 **📂 Filing actions** and **🔍 Move verification** — per Step 6 format.
 
@@ -238,7 +252,7 @@ Runs **last**, after Steps 4, 7, 3.5 and 3. Create the briefing as a message and
 3. **Body:** the full Step 3 briefing, including the Step 6 **📂 Filing actions** and **🔍 Move verification** sections, ending with the delivery line: "Delivered to inbox by morning briefing at [timestamp]"
 
 **Execution:**
-1. **Format the body as HTML** (`bodyType: "html"`) — emoji section headers (📅 Meetings, 🔴 Action needed, 📌 FYI, 🗃️ Low priority, 💬 Teams, 🌐 Unifi Alerts, 🎫 New Syncro Tickets, ⏳ Long-Term Follow-Up, 🎯 Suggested Focus, 📂 Filing actions, 🔍 Move verification), bullet lists (`<ul><li>`), and bold (`<strong>`) for emphasis. Do not use plain text.
+1. **Format the body as HTML** (`bodyType: "html"`) — emoji section headers (🔴 Action needed, 📅 Meetings, 📌 FYI, 🗃️ Low priority, 💬 Teams, 🌐 Unifi Alerts, 🎫 New Syncro Tickets, ⏳ Long-Term Follow-Up, 🎯 Suggested Focus, 📂 Filing actions, 🔍 Move verification), bullet lists (`<ul><li>`), and bold (`<strong>`) for emphasis. Do not use plain text.
 2. Call `outlook_create_draft` with the complete HTML body (this creates the message in Drafts).
 3. Immediately call `outlook_modify_labels` on the newly created message ID, with `moveToFolderId` set to the **Inbox** folder ID (`AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwAAAgEMAAAA`). This is a folder move only — no network send, no email leaves the mailbox.
 4. **No `outlook_send_mail` call at any point.**
@@ -320,15 +334,17 @@ If nothing was filed, state: "No filing actions this run."
 ```
 🌅 Here's your day at a glance.
 
+🔴 Action needed
+- #48848 MMC — laptop stolen last night; exposure grows until it is locked or wiped
+- MMC-Kenny Home — WiFi impersonation alert 8:27 AM, still live
+- CUSTOMER REPLY REMINDER #47738 — 2nd reminder in 7 days, customer waiting on us
+- [Client] "Follow-up on proposal" — they are waiting on pricing answers
+
 📅 Today's Meetings
 - ⚡ 9:00 AM – Standup with Engineering (30 min) — Zoom
 - 2:00 PM – Product Review (1 hr) — Conf Room B
 
 📬 Inbox Highlights
-🔴 Action needed:
-- [Client] "Follow-up on proposal" — They have questions about pricing
-- CUSTOMER REPLY REMINDER — Ticket #47738, 2nd reminder in 7 days, no follow-up
-
 📌 FYI:
 - [IT] "Scheduled maintenance Friday 6–8 PM" — Plan accordingly
 
@@ -338,16 +354,18 @@ If nothing was filed, state: "No filing actions this run."
 - Design team is asking for feedback on the new mockups (pinged you twice)
 
 🌐 Unifi Alerts (last 8 hours)
-⚠️ MMC-Kenny Home — WiFi Impersonation Detected 8:27 AM, unresolved
+⚠️ MMC-Kenny Home — WiFi Impersonation Detected 8:27 AM — see Action needed
 ✅ B&R - GB — device offline 5:16 AM → reconnected 5:18 AM (2 min)
 
 🎫 New Syncro Tickets (last 8 hours)
+MMC - Mallick Mechanical Contractors
+- #48848 — Jenn's Laptop (Other · 10:00 AM) — see Action needed
 Mid-Maryland Musculoskeletal Institute
 - #48364 — Corinna and Shelly cannot get into PCs after power outage (Remote Support · 9:31 AM)
 - #48370 — FW: Computer in UC needs printers installed (Other · 9:52 AM) — see Action needed
 MPH - Mallick Plumbing & Heating
 - #48371 — Ian Andrews - Password Reset (Other · 11:50 AM)
-3 tickets across 2 customers
+4 tickets across 3 customers
 
 ⏳ Long-Term Follow-Up
 - Axcient "Case #12345" — tagged, in Inbox 3 days
