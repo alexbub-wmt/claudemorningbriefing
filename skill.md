@@ -24,6 +24,7 @@ Prepares the user for their day by summarizing their inbox, today's calendar, an
 - **No filing registry.** The mailbox is the record: the **Claude Auto** category marks an email as already processed, `_SYNCRO ALERTS` holds reminder history, and each Daily Briefing Summary email is the audit trail. Do not write a registry file — scheduled runs start in a fresh workspace, so it would not persist.
 - Always include the filing summary footer so the user can verify what was processed and spot any errors. Report counts by rule.
 - The extended 7-day lookback (Step 3.5) is **Inbox only** and read-only — it never triggers new filing actions.
+- The briefing also carries **Unifi alerts** and a **new Syncro ticket list** (Step 1), each covering the 8 hours since the prior run. These come from the `anthropic-skills:unifi-alerts` and `anthropic-skills:syncro-ticket-review` skills, which own their own folder locations — do not hardcode folders for them.
 - The summary (step 5) is created as a draft and moved to Inbox. It is **never sent** — no `outlook_send_mail` call at any point. The only address used is alex@westmaintech.com.
 
 ## Step-by-Step Workflow
@@ -39,6 +40,12 @@ outlook_email_search(folderName="Inbox", afterDateTime="2 days ago", limit=25)
 **Paginate until exhausted.** The API caps results at 25 per call, so if the response indicates more results exist (`moreResults: true`, or a `totalResultCount` higher than what you received), call again with `offset` 25, then 50, and so on until every email in the window has been retrieved. **Do not process a partial set** — emails past the first 25 are silently skipped otherwise, which has caused missed filings before. Store full results (sender, recipient, subject, body snippet, messageId, categories).
 
 **_SYNCRO ALERTS** — last 2 days, read directly by folder ID (`read_resource` with `mail:///folders/{folderId}`, paginating if needed). Used for Rule 1 reminder counts and Step 7 verification.
+
+**Unifi alerts** — invoke `anthropic-skills:unifi-alerts` with the Skill tool, window **8 hours**, using the skill's default folder (_TO REVIEW > _ALERTS > CloudUnifi). Collect device offline/reconnect pairs, reboots, firmware updates and security alerts, grouped by customer site. Pair each offline with its matching reconnect so a resolved blip is reported once, as resolved.
+
+**New Syncro tickets** — invoke `anthropic-skills:syncro-ticket-review` with the Skill tool, window **8 hours**, source `__SYNCRO ALERTS` only (folder ID `AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwAEifQZqgAAAA==` — note the folder's real name has **two** leading underscores). Collect tickets created in the window, grouped by customer. This is read-only — it files nothing.
+
+If either skill is unavailable or returns an error, keep its section in the briefing with a one-line note saying what failed. Never omit the section silently, and never invent entries.
 
 **Calendar** — today's meetings and events:
 ```
@@ -80,6 +87,16 @@ For each notable email: sender name, subject, and a 1-sentence summary of what i
 **💬 Teams Highlights**
 Summarize notable messages or threads from the Step 1 Teams search and Rule 11 notification emails — don't list the same message twice. Skip automated bot messages.
 If nothing notable: "No urgent Teams messages."
+
+**🌐 Unifi Alerts** *(last 8 hours)*
+Group by customer site. Prefix active/unresolved alerts with ⚠️ and bold the site name; prefix offline→reconnect pairs and other closed items with ✅ and give the duration. Put anything still unresolved — a device still offline, a WiFi impersonation alert — in 🔴 Action needed as well.
+If nothing: "No Unifi alerts in the last 8 hours."
+
+**🎫 New Syncro Tickets** *(last 8 hours)*
+Group by customer, customer name bolded on its own line, then one bullet per ticket: `#XXXXX — Subject (Type · Time)`. Add an indented `↳ Update:` line for any ticket with activity since it was opened.
+Close with a count line: "N tickets across M customers."
+If nothing: "No new tickets in the last 8 hours."
+Do not repeat a ticket here that already appears in 🔴 Action needed as a CUSTOMER REPLY REMINDER — cross-reference it instead (e.g. "see Action needed").
 
 **⏳ Long-Term Follow-Up** *(only if items found — see Step 3.5)*
 List items still open from the extended 7-day lookback. For each: sender/subject, how many days it's been sitting, and why it's still flagged (e.g., "Axcient Case #12345, tagged, in Inbox 3 days").
@@ -221,7 +238,7 @@ Runs **last**, after Steps 4, 7, 3.5 and 3. Create the briefing as a message and
 3. **Body:** the full Step 3 briefing, including the Step 6 **📂 Filing actions** and **🔍 Move verification** sections, ending with the delivery line: "Delivered to inbox by morning briefing at [timestamp]"
 
 **Execution:**
-1. **Format the body as HTML** (`bodyType: "html"`) — emoji section headers (📅 Meetings, 🔴 Action needed, 📌 FYI, 🗃️ Low priority, 💬 Teams, ⏳ Long-Term Follow-Up, 🎯 Suggested Focus, 📂 Filing actions, 🔍 Move verification), bullet lists (`<ul><li>`), and bold (`<strong>`) for emphasis. Do not use plain text.
+1. **Format the body as HTML** (`bodyType: "html"`) — emoji section headers (📅 Meetings, 🔴 Action needed, 📌 FYI, 🗃️ Low priority, 💬 Teams, 🌐 Unifi Alerts, 🎫 New Syncro Tickets, ⏳ Long-Term Follow-Up, 🎯 Suggested Focus, 📂 Filing actions, 🔍 Move verification), bullet lists (`<ul><li>`), and bold (`<strong>`) for emphasis. Do not use plain text.
 2. Call `outlook_create_draft` with the complete HTML body (this creates the message in Drafts).
 3. Immediately call `outlook_modify_labels` on the newly created message ID, with `moveToFolderId` set to the **Inbox** folder ID (`AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwAAAgEMAAAA`). This is a folder move only — no network send, no email leaves the mailbox.
 4. **No `outlook_send_mail` call at any point.**
@@ -319,6 +336,18 @@ If nothing was filed, state: "No filing actions this run."
 
 💬 Teams Highlights
 - Design team is asking for feedback on the new mockups (pinged you twice)
+
+🌐 Unifi Alerts (last 8 hours)
+⚠️ MMC-Kenny Home — WiFi Impersonation Detected 8:27 AM, unresolved
+✅ B&R - GB — device offline 5:16 AM → reconnected 5:18 AM (2 min)
+
+🎫 New Syncro Tickets (last 8 hours)
+Mid-Maryland Musculoskeletal Institute
+- #48364 — Corinna and Shelly cannot get into PCs after power outage (Remote Support · 9:31 AM)
+- #48370 — FW: Computer in UC needs printers installed (Other · 9:52 AM) — see Action needed
+MPH - Mallick Plumbing & Heating
+- #48371 — Ian Andrews - Password Reset (Other · 11:50 AM)
+3 tickets across 2 customers
 
 ⏳ Long-Term Follow-Up
 - Axcient "Case #12345" — tagged, in Inbox 3 days
