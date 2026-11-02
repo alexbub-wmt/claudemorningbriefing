@@ -8,7 +8,7 @@ description: >
   a daily summary of emails, meetings, and messages. Trigger even if the user
   only mentions one of the three (email/calendar/Teams) — always pull all three
   for a complete picture. This skill uses Microsoft 365 (Outlook + Teams).
-compatibility: "Requires Microsoft 365 connector (Outlook + Teams)"
+compatibility: "Requires Microsoft 365 connector (Outlook + Teams) and the Syncro connector (list_tickets, get_ticket)"
 ---
 
 # Morning Briefing Skill
@@ -24,7 +24,7 @@ Prepares the user for their day by summarizing their inbox, today's calendar, an
 - **No filing registry.** The mailbox is the record: the **Claude Auto** category marks an email as already processed, `_SYNCRO ALERTS` holds reminder history, and each Daily Briefing Summary email is the audit trail. Do not write a registry file — scheduled runs start in a fresh workspace, so it would not persist.
 - Always include the filing summary footer so the user can verify what was processed and spot any errors. Report counts by rule.
 - The extended 7-day lookback (Step 3.5) is **Inbox only** and read-only — it never triggers new filing actions.
-- The briefing also carries **Unifi alerts** and a **new Syncro ticket list** (Step 1), each covering the 8 hours since the prior run. These come from the `anthropic-skills:unifi-alerts` and `anthropic-skills:syncro-ticket-review` skills, which own their own folder locations — do not hardcode folders for them.
+- The briefing also carries **Unifi alerts** (8-hour window, from the `anthropic-skills:unifi-alerts` skill, which owns its own folder location) and a **new Syncro ticket list** (10-hour window, pulled from the **Syncro API**, not from mail). Step 7 reconciles the API pull against the `__SYNCRO ALERTS` folder so a ticket can never be missed because of an API gap.
 - The summary (step 5) is created as a draft and moved to Inbox. It is **never sent** — no `outlook_send_mail` call at any point. The only address used is alex@westmaintech.com.
 
 ## Step-by-Step Workflow
@@ -43,9 +43,20 @@ outlook_email_search(folderName="Inbox", afterDateTime="2 days ago", limit=25)
 
 **Unifi alerts** — invoke `anthropic-skills:unifi-alerts` with the Skill tool, window **8 hours**, using the skill's default folder (_TO REVIEW > _ALERTS > CloudUnifi). Collect device offline/reconnect pairs, reboots, firmware updates and security alerts, grouped by customer site. Pair each offline with its matching reconnect so a resolved blip is reported once, as resolved.
 
-**New Syncro tickets** — invoke `anthropic-skills:syncro-ticket-review` with the Skill tool, window **8 hours**, source `__SYNCRO ALERTS` only (folder ID `AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwAEifQZqgAAAA==` — note the folder's real name has **two** leading underscores). Collect tickets created in the window, grouped by customer. This is read-only — it files nothing.
+**New Syncro tickets** — pull from the **Syncro API**, not from mail. Call `list_tickets` with `created_after` set to **10 hours before the run time**, RFC 3339 with a UTC offset (e.g. `2026-11-02T00:00:00Z`), and `per_page: 100`. Page until `pagination.has_more` is false. Read-only — this files nothing.
 
-If either skill is unavailable or returns an error, keep its section in the briefing with a one-line note saying what failed. Never omit the section silently, and never invent entries.
+The 10-hour window against an 8-hour run cadence is deliberate: the 2-hour overlap means a ticket opened near a run boundary is never missed. Repeats between runs are expected and are not duplicates to suppress.
+
+For each ticket keep: `number`, `subject`, `status`, `priority`, `created_at`, `updated_at`, `customer_business_then_name`, `problem_type`, `ticket_type_name`, `user_id` (null = unassigned), `customer_reply`, `sla_breached`, `sla_breaching_soon`, `due_date`. Ignore the embedded `comments[].rich_text_preview` — it is large and adds nothing; use `comments[].body` only when you need the substance of an update.
+
+**Flag these three states** and carry the flags into Step 3. They are facts about a ticket's current state, not a list of important subjects:
+- **Urgent** — `priority` contains "urgent" or "high" (case-insensitive), or `sla_breached` is true. Note `priority` is often an empty string in this account, so its absence means nothing.
+- **Unacknowledged** — `status` is exactly `New` **and** `created_at` is more than **2 hours** before the run time. Nobody has picked it up.
+- **Customer waiting** — `status` is `Customer Reply`, or `customer_reply` is true. The customer has answered and the ball is back with us.
+
+A flag is evidence for Step 3's ranking test, not a verdict: an unflagged ticket can still belong in Action needed, and a flagged one can be routine. Say which flag applies when you list the ticket.
+
+If the Unifi skill or the Syncro API is unavailable or returns an error, keep its section in the briefing with a one-line note saying what failed. Never omit the section silently, and never invent entries. For a Syncro API failure specifically, fall back to the mail folder per Step 7 item 8 and label the section as mail-only.
 
 **Calendar** — today's meetings and events:
 ```
@@ -107,10 +118,10 @@ If nothing notable: "No urgent Teams messages."
 Full inventory, grouped by customer site. Prefix anything with no resolution ⚠️ and bold the site; prefix resolved items ✅ and give the duration. An offline paired with its reconnect is one resolved line.
 If nothing: "No Unifi alerts in the last 8 hours."
 
-**🎫 New Syncro Tickets** *(last 8 hours)*
-Full inventory, grouped by customer, customer name bolded on its own line, then one bullet per ticket: `#XXXXX — Subject (Type · Time)`. Add an indented `↳ Update:` line for any ticket with activity since it was opened.
-Close with a count line: "N tickets across M customers."
-If nothing: "No new tickets in the last 8 hours."
+**🎫 New Syncro Tickets** *(last 10 hours)*
+Full inventory from the Step 1 API pull, grouped by customer, customer name bolded on its own line, then one bullet per ticket: `#XXXXX — Subject (Type · Time · Status)`. Append any Step 1 flag in brackets — `[urgent]`, `[new 3h, unassigned]`, `[customer waiting]`. Add an indented `↳ Update:` line for any ticket with activity since it was opened.
+Close with a count line: "N tickets across M customers, F flagged."
+If nothing: "No new tickets in the last 10 hours."
 
 **⏳ Long-Term Follow-Up** *(only if items found — see Step 3.5)*
 List items still open from the extended 7-day lookback. For each: sender/subject, how many days it's been sitting, and why it's still flagged (e.g., "Axcient Case #12345, tagged, in Inbox 3 days").
@@ -265,6 +276,7 @@ At the bottom of every briefing, include a **Filing Actions** section with:
 - Any tagging or move failures (email ID, rule, error detail)
 - Emails skipped because they were already tagged Claude Auto
 - Prior-run failed moves that were retried
+- Syncro reconciliation result (per Step 7 item 8)
 - Delivery line (summary is delivered to Inbox, not left in Drafts)
 
 Example format:
@@ -315,11 +327,22 @@ If nothing was filed, state: "No filing actions this run."
 ✓ Verified 3/3 moves to _SYNCRO ALERTS
 ✓ Verified 1/1 move to _TO REVIEW > NEWS
 ⚠️ 2 emails still in Inbox despite reported "success": "CUSTOMER REPLY REMINDER" [messageId], "A Ticket Reply came in" [messageId]. Filing did not actually complete — retrying required.
+
+🔁 Syncro reconciliation: API returned 7 tickets, __SYNCRO ALERTS held 8 for the same window.
+   ⚠️ #48861 was in mail but not in the API — recovered via get_ticket and included above.
+   1 API ticket had no notification email (normal).
 ```
 
 7. **If any verification fails, do not silently retry with the same batch call** — first check the per-message `categoriesFailed` / `moveFailed` arrays from step 4. If the batch call itself reported failure for that message, retry the specific failed operation once. If the batch call reported success but the email is still in Inbox, treat this as a deeper sync/API issue — report it clearly rather than looping retries, since blind retries could cause duplicate moves. (The next run's Step 4 item 1 will pick it up again.)
 
-**Why this matters:** the CUSTOMER REPLY REMINDER and Syncro Community incidents both involved emails that were tagged but not actually moved, even though the tagging step appeared to succeed. This verification step catches that failure mode before the user finds out the hard way.
+8. **Reconcile the Syncro API pull against the mail folder.** The ticket list in Step 1 comes from the API; the `__SYNCRO ALERTS` folder is the independent second record. Check one against the other every run:
+   - Read `__SYNCRO ALERTS` by folder ID (`AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwAEifQZqgAAAA==` — the real folder name has **two** leading underscores) and take every "A Ticket was created" email received inside the same 10-hour window. Pull the ticket number from the body's `Number:` line.
+   - Compare that set of numbers against the numbers from the API pull.
+   - **In mail but not in the API → a missed ticket.** Call `get_ticket({ ticket_number: N })` for each, add it to the ticket inventory marked "recovered from mail", apply the Step 1 flags and the Step 3 ranking test to it like any other, and report it in the footer. Never drop it silently.
+   - **In the API but not in mail → report the count only.** This is normal (a server-side rule may not have filed the notification) and is not an error, but a large or growing gap means the mail rule is failing and is worth saying out loud.
+   - If the API call itself failed earlier in the run, say so plainly and build the ticket section from the mail folder alone, labelled as such. Never present a mail-only list as if the API had been read.
+
+**Why this matters:** the CUSTOMER REPLY REMINDER and Syncro Community incidents both involved emails that were tagged but not actually moved, even though the tagging step appeared to succeed. This verification step catches that failure mode before the user finds out the hard way. The Step 8 reconciliation exists for the same reason in the other direction: two independent records of the same tickets, each able to catch what the other drops.
 
 ## Edge Cases
 
@@ -357,15 +380,15 @@ If nothing was filed, state: "No filing actions this run."
 ⚠️ MMC-Kenny Home — WiFi Impersonation Detected 8:27 AM — see Action needed
 ✅ B&R - GB — device offline 5:16 AM → reconnected 5:18 AM (2 min)
 
-🎫 New Syncro Tickets (last 8 hours)
+🎫 New Syncro Tickets (last 10 hours)
 MMC - Mallick Mechanical Contractors
-- #48848 — Jenn's Laptop (Other · 10:00 AM) — see Action needed
+- #48848 — Jenn's Laptop (Other · 10:00 AM · New) [new 3h, unassigned] — see Action needed
 Mid-Maryland Musculoskeletal Institute
-- #48364 — Corinna and Shelly cannot get into PCs after power outage (Remote Support · 9:31 AM)
-- #48370 — FW: Computer in UC needs printers installed (Other · 9:52 AM) — see Action needed
+- #48364 — Corinna and Shelly cannot get into PCs after power outage (Remote Support · 9:31 AM · In Progress)
+- #48370 — FW: Computer in UC needs printers installed (Other · 9:52 AM · Customer Reply) [customer waiting] — see Action needed
 MPH - Mallick Plumbing & Heating
-- #48371 — Ian Andrews - Password Reset (Other · 11:50 AM)
-4 tickets across 3 customers
+- #48371 — Ian Andrews - Password Reset (Other · 11:50 AM · In Progress)
+4 tickets across 3 customers, 2 flagged
 
 ⏳ Long-Term Follow-Up
 - Axcient "Case #12345" — tagged, in Inbox 3 days
@@ -381,6 +404,7 @@ Skipped 4 (already tagged Claude Auto)
 
 🔍 Move verification:
 ✓ Verified 2/2 moves
+🔁 Syncro reconciliation: API 4, mail 4 — no gaps
 
 ✉️ Delivered to inbox by morning briefing at 12:31 PM
 ```
