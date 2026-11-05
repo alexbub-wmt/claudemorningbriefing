@@ -225,9 +225,10 @@ Apply filing rules to recurring automated senders using **email-first, rule-orde
 5. **Syncro webinar/promotional** (sender `webinars@syncrosecure.com`):
    - Tag, move to **_TO REVIEW > NEWS**.
 
-6. **Blackpoint Cyber marketing** (sender `marketing@blackpointcyber.com`):
-   - Tag, move to **_TO REVIEW > NEWS**.
-   - Note: `support@blackpointcyber.com` (renewals, billing reports) does NOT match — no rule defined yet.
+6. **Vendor marketing & informational newsletters** (sender `marketing@blackpointcyber.com`, OR any sender address at a Spiceworks domain — e.g. `spiceworks@mail.spiceworks.com`, display name "Spiceworks"; any subject):
+   - Blackpoint Cyber marketing and Spiceworks informational/promotional mail (webinars, industry newsletters, "AI readiness"-style content, etc.).
+   - Tag, move to **_TO REVIEW > NEWS**. No body read needed; match on sender only.
+   - Note: `support@blackpointcyber.com` (renewals, billing reports) does NOT match — no rule defined yet. Blackpoint SOC threat notices from `apg@blackpointcyber.com` also do NOT match — those stay in Inbox and are surfaced in the briefing.
 
 7. **Comcast payment notifications** (sender `online.communications@alerts.comcast.net`, subject contains "payment"):
    - Tag, move to **VENDORS > Comcast**.
