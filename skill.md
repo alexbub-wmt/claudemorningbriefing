@@ -47,7 +47,7 @@ outlook_email_search(folderName="Inbox", afterDateTime="2 days ago", limit=25)
 
 **_SYNCRO ALERTS** — last 2 days, read directly by folder ID (`read_resource` with `mail:///folders/{folderId}`, paginating if needed). Used for Rule 1 reminder counts and Step 7 verification.
 
-**Unifi alerts** — invoke `anthropic-skills:unifi-alerts` with the Skill tool, window **8 hours**, using the skill's default folder (_TO REVIEW > _ALERTS > CloudUnifi). Collect device offline/reconnect pairs, reboots, firmware updates and security alerts, grouped by customer site. Pair each offline with its matching reconnect so a resolved blip is reported once, as resolved.
+**Unifi alerts** — invoke `anthropic-skills:unifi-alerts` with the Skill tool, window **8 hours**, using the skill's default folder (_TO REVIEW > _ALERTS > CloudUnifi). Collect device offline/reconnect pairs, reboots, firmware updates and security alerts, grouped by customer site. Pair each offline with its matching reconnect so a resolved blip is reported once, as resolved. Tally `Device IP Address Conflict` and `WiFi Impersonation Detected` alerts separately, by customer site — they are routine reporting, not action items (see Step 3).
 
 **Syncro tickets** — pull from the **Syncro API**, not from mail. Read-only; this files nothing. Make **two** calls and merge the results, de-duplicating by ticket `number`:
 
@@ -101,6 +101,8 @@ Apply this test to every item, whatever its source. Judge it by what it actually
 
 One standing rule sits on top of the test: **every ticket flagged Customer waiting in Step 1 goes in Action needed**, regardless of age or subject. This is not an exception to the test — a customer who has replied is blocked on you — it is settled in advance so it never has to be re-argued.
 
+**Standing exclusions.** Unifi `Device IP Address Conflict` and `WiFi Impersonation Detected` alerts are routine reporting. Never put them in Action needed, however many fire or how recent. They appear only in the Unifi section's Informational list.
+
 Order Action needed worst-first by the same test. An item that qualifies is listed there **once**, and its inventory section cross-references it ("see Action needed") rather than repeating it.
 
 Use this format:
@@ -110,7 +112,7 @@ Use this format:
 ## 🌅 Here's your day at a glance.
 
 **🔴 Action needed** *(ranked worst-first, any source)*
-One line each: what it is, where it came from (ticket #, sender, site), and what is waiting on you. Say plainly why it is here — what gets worse, or who is blocked.
+Facts only, one short line each: ticket #/sender/site, what it is, time or age, assignee if unassigned. No explanations, no italics, and no commentary on why it qualifies (no "customer waiting", "a person is blocked", "waiting makes it worse"). Keep each line as short as possible.
 If nothing qualifies: "Nothing needs action right now."
 
 **📅 Today's Meetings** *(chronological)*
@@ -131,6 +133,7 @@ If nothing notable: "No urgent Teams messages."
 
 **🌐 Unifi Alerts** *(last 8 hours)*
 Full inventory, grouped by customer site. Prefix anything with no resolution ⚠️ and bold the site; prefix resolved items ✅ and give the duration. An offline paired with its reconnect is one resolved line.
+Then an **Informational (not actionable)** list for `Device IP Address Conflict` and `WiFi Impersonation Detected` alerts: one line per alert type, customers with counts and latest time, e.g. `IP address conflicts: 24/7 Dance Studio ×2 (latest 8:32 PM), WSA Urbana ×1 (12:08 PM)`. These are not prefixed ⚠️ and never appear in Action needed. Omit a line if there were none.
 If nothing: "No Unifi alerts in the last 8 hours."
 
 **🎫 Open Syncro Tickets** *(new in last 10 hours, plus all Customer Reply)*
@@ -389,12 +392,11 @@ If nothing was filed, state: "No filing actions this run."
 🌅 Here's your day at a glance.
 
 🔴 Action needed
-- #48370 MMI — customer replied 9:52 AM, waiting on us
-- #48199 MPH — customer replied on a ticket open since Oct 14, still waiting
-- #48848 MMC — laptop stolen last night; exposure grows until it is locked or wiped
-- MMC-Kenny Home — WiFi impersonation alert 8:27 AM, still live
-- CUSTOMER REPLY REMINDER #47738 — 2nd reminder in 7 days, customer waiting on us
-- [Client] "Follow-up on proposal" — they are waiting on pricing answers
+- #48370 MMI — customer replied 9:52 AM
+- #48199 MPH — customer replied, open since Oct 14
+- #48848 MMC — laptop stolen last night
+- CUSTOMER REPLY REMINDER #47738 — 2nd reminder in 7 days
+- [Client] "Follow-up on proposal" — pricing questions pending
 
 📅 Today's Meetings
 - ⚡ 9:00 AM – Standup with Engineering (30 min) — Zoom
@@ -410,8 +412,10 @@ If nothing was filed, state: "No filing actions this run."
 - Design team is asking for feedback on the new mockups (pinged you twice)
 
 🌐 Unifi Alerts (last 8 hours)
-⚠️ MMC-Kenny Home — WiFi Impersonation Detected 8:27 AM — see Action needed
 ✅ B&R - GB — device offline 5:16 AM → reconnected 5:18 AM (2 min)
+Informational (not actionable):
+WiFi impersonation: MMC-Kenny Home (8:27 AM)
+IP address conflicts: WSA Urbana ×1 (12:08 PM)
 
 🎫 Open Syncro Tickets (new in last 10 hours, plus all Customer Reply)
 MMC - Mallick Mechanical Contractors
