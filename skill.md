@@ -185,7 +185,7 @@ Apply filing rules to recurring automated senders using **email-first, rule-orde
 
 **Filing Workflow:**
 
-1. **Skip already-processed emails** — if an email already has the **Claude Auto** category, skip it and count it as "already processed." **Exception:** an email tagged Claude Auto but still in Inbox that should have been moved (Rules 1, 3–8, 10 MMC/WMT, 11, 12) is a failed move from a prior run — queue its move again without re-tagging, and note the retry in the footer.
+1. **Skip already-processed emails** — if an email already has the **Claude Auto** category, skip it and count it as "already processed." **Exception:** an email tagged Claude Auto but still in Inbox that should have been moved (Rules 1, 3–8, 10 MMC/WMT, 11, 12, 13) is a failed move from a prior run — queue its move again without re-tagging, and note the retry in the footer.
 
 2. **Process each remaining email in order** — for each email:
    - Check **every defined rule** in sequence (priority order below), starting at rule 1 and continuing until a match is found or the rule list is exhausted
@@ -247,7 +247,7 @@ Apply filing rules to recurring automated senders using **email-first, rule-orde
     - If the PDF attachment filename **starts with "WMT"** (case-insensitive, any separator or none — e.g. `WMT_AUTH_EVENTS.pdf`): tag, move to **_WMT > COMPLIANCE** (folder ID: `AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwABPCPpnQAAAA==`). Note: this is the COMPLIANCE folder nested under _WMT — not the separate top-level COMPLIANCE folder that also exists in the mailbox.
     - If the PDF attachment filename starts with a **different, unrecognized** prefix (any client other than "MMC" or "WMT"): do NOT move. Tag Claude Auto, leave in inbox, and surface in the briefing as an unrecognized client prefix that needs a new rule — do not guess a destination folder for it.
     - Do not match on subject or recipient alone — always confirm via the actual attachment filename, since these reports are otherwise identical across clients.
-    - Note: this is distinct from `do-not-reply@central.sophos.com` "[HIGH] Alert for Sophos Central" real-time alert emails — those are a separate, still-undefined case and fall through to Rule 13.
+    - Note: this is distinct from `do-not-reply@central.sophos.com` "[HIGH] Alert for Sophos Central" real-time alert emails — those are a separate, still-undefined case and fall through to Rule 14.
 
 11. **Teams message notifications** (sender `no-reply@teams.mail.microsoft`):
     - Read and analyze content FIRST; include relevant details in the briefing (💬 Teams Highlights section).
@@ -255,10 +255,14 @@ Apply filing rules to recurring automated senders using **email-first, rule-orde
 
 12. **Axcient x360Cloud summary digests — CFOR** (sender `alerts@westmaintech.com` — display name "WMT ALERTS" — subject contains "x360Cloud Summary Digest", e.g. `FW: cforestart: x360Cloud Summary Digest`):
     - Tag, move to **_TO REVIEW > _ALERTS > Axcient > CFOR** (folder ID: `AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwAEifQaGQAAAA==`). No body read needed; match on sender + subject only.
-    - Note: digests from other Axcient customers (e.g. `no-reply@axcient.com` "mallickplumbing: x360Cloud Summary Digest") do NOT match — no rule defined yet.
+    - Note: digests from other Axcient customers do NOT match this rule (mallickplumbing is Rule 13; others have no rule yet).
     - Note: `support@axcient.com` "Case #" emails still fall under Rule 9 (tag only). Other `alerts@westmaintech.com` mail (e.g. Unifi alerts) does NOT match.
 
-13. **Any other sender** → do not touch (no rule defined; surface in briefing and confirm with user before adding a rule).
+13. **Axcient x360Cloud summary digests — MMC (mallickplumbing)** (sender `no-reply@axcient.com` — display name "x360Cloud" — subject contains "mallickplumbing: x360Cloud Summary Digest"):
+    - Tag, move to **_TO REVIEW > _ALERTS > Axcient > MMC** (folder ID: `AQMkADk0OTc2MzVkLWUyM2QtNDkwMi1hZWY0LWQ0M2JmNTA2NWQwZQAuAAADBgrMhQbA1UCWYZzkkEmHugEAAnJtQHWQ1kiJdEjgrI_4cwABhIAATgAAAA==`). No body read needed; match on sender + subject only.
+    - Note: digests from other Axcient customers do NOT match — no rule defined yet.
+
+14. **Any other sender** → do not touch (no rule defined; surface in briefing and confirm with user before adding a rule).
 
 **Quick reference — destinations:**
 
@@ -267,13 +271,14 @@ Apply filing rules to recurring automated senders using **email-first, rule-orde
 | _SYNCRO ALERTS | 1, 2 (no "REPLY ABOVE"), 4 |
 | _TO REVIEW > NEWS | 3, 5, 6 |
 | _TO REVIEW > _ALERTS > Axcient > CFOR | 12 |
+| _TO REVIEW > _ALERTS > Axcient > MMC | 13 |
 | VENDORS > Comcast | 7 |
 | VENDORS > Bitwarden | 8 |
 | Clients > MMC > _SOPHOS REPORTS | 10 (MMC prefix) |
 | _WMT > COMPLIANCE | 10 (WMT prefix) |
 | Tag only, stays in Inbox | 2 (with "REPLY ABOVE"), 9, 10 (unrecognized prefix) |
 | Deleted Items (soft) | 11 |
-| Untouched | 13 |
+| Untouched | 14 |
 
 ### 5. Create Summary Email and Deliver to Inbox
 
