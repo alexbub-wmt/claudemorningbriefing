@@ -23,6 +23,7 @@ Prepares the user for their day by summarizing their inbox, today's calendar, an
 - **Processing guarantee**: batch tag and move operations atomically; every email gets evaluated; no rule is skipped.
 - **No filing registry.** The mailbox is the record: the **Claude Auto** category marks an email as already processed, `_SYNCRO ALERTS` holds reminder history, and each Daily Briefing Summary email is the audit trail. Do not write a registry file — scheduled runs start in a fresh workspace, so it would not persist.
 - Always include the filing summary footer so the user can verify what was processed and spot any errors. Report counts by rule.
+- **The briefing reports; it does not advise.** Action needed carries recorded facts only — no consequences, no recommendations, no speculation. WiFi Impersonation and IP Address Conflict alerts are informational: customer names only, never analysed, never actionable.
 - The extended 7-day lookback (Step 3.5) is **Inbox only** and read-only — it never triggers new filing actions.
 - The briefing also carries **Unifi alerts** (8-hour window, from the `anthropic-skills:unifi-alerts` skill, which owns its own folder location) and a **Syncro ticket list** (new in the last 10 hours, plus every ticket in Customer Reply status regardless of age, pulled from the **Syncro API**, not from mail). Step 7 reconciles the API pull against the `__SYNCRO ALERTS` folder and reports any gap as a footer disclaimer.
 - The summary (step 5) is created as a draft and moved to Inbox. It is **never sent** — no `outlook_send_mail` call at any point. The only address used is alex@westmaintech.com.
@@ -104,7 +105,21 @@ Use this format:
 ## 🌅 Here's your day at a glance.
 
 **🔴 Action needed** *(ranked worst-first, any source)*
-One line each: what it is, where it came from (ticket #, sender, site), and what is waiting on you. Say plainly why it is here — what gets worse, or who is blocked.
+One short line per item, **facts only**. Shape: identifier (ticket #, sender, or site) — customer — what the record says — the recorded state in parentheses (status, age, due date, who replied and when).
+
+**Report, do not analyse.** Print only what the source literally says. No reasoning, no consequences, no recommendations, no hedging. Specifically, never write:
+- why it matters, what it could lead to, or what grows worse with time
+- what to decide, check, review, consider or watch
+- guesses or qualifiers — "likely", "appears", "seems", "possibly", "no evidence of", "worth a look"
+- that someone is blocked unless the record states it
+
+The ranking test below is reasoning you perform silently to choose and order these lines. It never appears in the text.
+
+Aim for 15 words or fewer per line. Examples of the right shape:
+- `#48884 MVFC — Jane Beaulieu replacement laptop (Customer Reply, replied 8:23 PM, past due, assigned to you)`
+- `#48947 Boggs Environmental — Mark cannot log in to M365 via LogMeIn (Customer Reply, reply flag set)`
+- `#48948 RESIDENTIAL — Everyone's PC won't restart (New 8h, unassigned, opened 12:01 PM by Denise)`
+
 If nothing qualifies: "Nothing needs action right now."
 
 **📅 Today's Meetings** *(chronological)*
@@ -124,8 +139,16 @@ Summarize notable messages or threads from the Step 1 Teams search and Rule 11 n
 If nothing notable: "No urgent Teams messages."
 
 **🌐 Unifi Alerts** *(last 8 hours)*
-Full inventory, grouped by customer site. Prefix anything with no resolution ⚠️ and bold the site; prefix resolved items ✅ and give the duration. An offline paired with its reconnect is one resolved line.
-If nothing: "No Unifi alerts in the last 8 hours."
+Split into two groups, device events first.
+
+*Device events* — everything except the two informational types below. Grouped by customer site: ⚠️ for anything with no resolution, bold the site; ✅ for resolved, with the duration. An offline paired with its reconnect is one resolved line. These are in scope for the ranking test.
+If none: "No Unifi device events in the last 8 hours."
+
+*ℹ️ Informational* — **WiFi Impersonation Detected** and **Device IP Address Conflict**. These two types are **never actionable**: they have no clearing event and recur nightly. They are excluded from the ranking test, from 🔴 Action needed, and from 🎯 Suggested Focus. Do not analyse them, do not compare them to previous nights, do not say whether they look recurring, benign, or in need of tuning, and do not suggest anything about them.
+List **customer names only**, one line per type, with a count. No device names, no timestamps, no commentary:
+`ℹ️ WiFi Impersonation (4): MMC-Kenny Home, Andochick, Fordham Lee Distillery, ValleySchool`
+`ℹ️ IP Address Conflict (2): 24/7 Dance Studio, WSA Urbana`
+Omit a line when that type had none.
 
 **🎫 Open Syncro Tickets** *(new in last 10 hours, plus all Customer Reply)*
 Full inventory from the Step 1 API pull, grouped by customer, customer name bolded on its own line, then one bullet per ticket: `#XXXXX — Subject (Type · Time · Status)`. Append any Step 1 flag in brackets — `[customer waiting]`, `[urgent]`, `[new 3h, unassigned]`. Add an indented `↳ Update:` line for any ticket with activity since it was opened.
@@ -138,7 +161,7 @@ List items still open from the extended 7-day lookback. For each: sender/subject
 If nothing found in the lookback: omit this section entirely (don't show an empty header).
 
 **🎯 Suggested Focus**
-2–3 bullets on what to tackle first and in what order, drawn from Action needed. This is for sequencing only — never use it to raise something that should have been in Action needed.
+Up to 3 items from Action needed, listed in the order to do them — identifier and customer only, no reasons and no commentary. Sequencing only: never raise something here that should have been in Action needed, and never add justification.
 
 **📂 Filing actions** and **🔍 Move verification** — per Step 6 format.
 
@@ -371,12 +394,11 @@ If nothing was filed, state: "No filing actions this run."
 🌅 Here's your day at a glance.
 
 🔴 Action needed
-- #48370 MMI — customer replied 9:52 AM, waiting on us
-- #48199 MPH — customer replied on a ticket open since Oct 14, still waiting
-- #48848 MMC — laptop stolen last night; exposure grows until it is locked or wiped
-- MMC-Kenny Home — WiFi impersonation alert 8:27 AM, still live
-- CUSTOMER REPLY REMINDER #47738 — 2nd reminder in 7 days, customer waiting on us
-- [Client] "Follow-up on proposal" — they are waiting on pricing answers
+- #48848 MMC — Jenn's laptop stolen (New 3h, unassigned, opened 10:00 AM)
+- #48370 MMI — printers not installed on UC computer (Customer Reply, replied 9:52 AM)
+- #48199 MPH — website CMS file control (Customer Reply, open since Oct 14)
+- CUSTOMER REPLY REMINDER #47738 — 2nd reminder in 7 days
+- [Client] "Follow-up on proposal" — pricing questions, received 8:14 AM
 
 📅 Today's Meetings
 - ⚡ 9:00 AM – Standup with Engineering (30 min) — Zoom
@@ -392,8 +414,11 @@ If nothing was filed, state: "No filing actions this run."
 - Design team is asking for feedback on the new mockups (pinged you twice)
 
 🌐 Unifi Alerts (last 8 hours)
-⚠️ MMC-Kenny Home — WiFi Impersonation Detected 8:27 AM — see Action needed
+Device events:
 ✅ B&R - GB — device offline 5:16 AM → reconnected 5:18 AM (2 min)
+⚠️ Palmer Animal Hospital — device offline 6:02 AM, no reconnect — see Action needed
+ℹ️ WiFi Impersonation (4): MMC-Kenny Home, Andochick, Fordham Lee Distillery, ValleySchool
+ℹ️ IP Address Conflict (2): 24/7 Dance Studio, WSA Urbana
 
 🎫 Open Syncro Tickets (new in last 10 hours, plus all Customer Reply)
 MMC - Mallick Mechanical Contractors
@@ -410,8 +435,9 @@ MPH - Mallick Plumbing & Heating
 - Axcient "Case #12345" — tagged, in Inbox 3 days
 
 🎯 Suggested Focus
-- Reply to the client email before your 11 AM — they seem to be waiting
-- Clear ticket #47738
+1. #48848 MMC
+2. #48370 MMI
+3. #47738 reply reminder
 
 ---
 📂 Filing actions this run:
