@@ -325,6 +325,8 @@ Paginate if `nextOffset` comes back. Build the set of (site, start time) already
 
 **On failure:** do not retry a failed create in the same run. Record the site and time in the briefing and move on; the next run's duplicate check will find the entry missing and create it then.
 
+**Every entry is reported in two places:** the *📆 Logged to calendar* group of the Unifi section (Step 3) and the **📂 Filing actions** footer (Step 6). The footer is the audit trail, so it carries the full subject line; the Unifi group is the at-a-glance version. Nothing Step 4.5 does — created, skipped, deduplicated, capped or failed — goes unreported in the footer.
+
 ### 5. Create Summary Email and Deliver to Inbox
 
 Runs **last**, after Steps 4, 7, 3.5 and 3. Create the briefing as a message and place it directly in Inbox — created as a draft and then relocated into Inbox, never sent over the network.
@@ -348,6 +350,7 @@ At the bottom of every briefing, include a **Filing Actions** section with:
 - Any tagging or move failures (email ID, rule, error detail)
 - Emails skipped because they were already tagged Claude Auto
 - Prior-run failed moves that were retried
+- **Calendar entries created by Step 4.5** — every one, with its full subject, start time and event count. Also name any block skipped for a missing timestamp, dropped by the duplicate check, left uncreated by the 10-entry cap, or that failed to create. If Step 4.5 both created and skipped nothing, say "No calendar entries this run."
 - Syncro reconciliation result (per Step 7 item 8) — a disclaimer about completeness, nothing more
 - Delivery line (summary is delivered to Inbox, not left in Drafts)
 
@@ -365,6 +368,12 @@ Skipped 5 (already tagged Claude Auto)
 
 ⚠️ Issues (1):
   • Tagging failed for email ID [xyz123]: "Rich Stewart new computer" — left untouched, no move attempted
+
+📆 Calendar entries created (3):
+  • AI-UNIFI-PMC Hagerstown - Unifi config activity — 1:21 PM, 3 events
+  • AI-UNIFI-Friends Martinsburg - Unifi config activity — 3:46 PM, 5 events
+  • AI-UNIFI-NANV TYSONS - Unifi config activity — 3:44 PM, 2 events
+  Skipped 1 already on the calendar (AI-UNIFI-WMTCloudUnifi, 3:45 PM). 0 failed, 0 capped.
 
 ✉️ Delivered to inbox by morning briefing at 12:31 PM
 ```
@@ -486,6 +495,7 @@ MPH - Mallick Plumbing & Heating
 📂 Filing actions this run:
 ✓ Tagged 3, moved 2 (Syncro alerts, news folder)
 Skipped 4 (already tagged Claude Auto)
+📆 Calendar entries created (3): AI-UNIFI-PMC Hagerstown 1:21 PM (3), AI-UNIFI-Friends Martinsburg 3:46 PM (5), AI-UNIFI-NANV TYSONS 3:44 PM (2). 0 skipped, 0 failed.
 
 🔍 Move verification:
 ✓ Verified 2/2 moves
