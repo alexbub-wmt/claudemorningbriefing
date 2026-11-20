@@ -17,13 +17,14 @@ Prepares the user for their day by summarizing their inbox, today's calendar, an
 
 **Implementation notes for Claude:**
 - This skill is best run with **Sonnet 5** for accuracy and reliability in pattern-matching complex email rules (sender/recipient/subject/body matching across the full rule set).
-- **Execution order (fixed):** Step 1 (gather) → Step 2 (read selectively) → Step 4 (file) → Step 7 (verify) → Step 3.5 (lookback) → Step 3 (build briefing, using Step 6 footer format) → Step 5 (deliver). The briefing is built **once**, after filing and verification, because the email body needs their results. Do not produce a separate chat version — the final chat response is only the Step 5 confirmation plus the Step 6 footer.
+- **Execution order (fixed):** Step 1 (gather) → Step 2 (read selectively) → Step 4 (file) → Step 4.5 (log Unifi config activity to calendar) → Step 7 (verify) → Step 3.5 (lookback) → Step 3 (build briefing, using Step 6 footer format) → Step 5 (deliver). The briefing is built **once**, after filing and verification, because the email body needs their results. Do not produce a separate chat version — the final chat response is only the Step 5 confirmation plus the Step 6 footer.
 - The filing workflow (step 4) is **email-first, rule-ordered**: process each email from the Step 1 inbox pull through every defined rule in order, apply the first match, and move to the next email.
 - Rules are ordered **most specific first** so a broad rule never shadows a narrow one (e.g. CUSTOMER REPLY REMINDER precedes the general Syncro ticket rule, since both come from `support@westmaintech.com`).
 - **Processing guarantee**: batch tag and move operations atomically; every email gets evaluated; no rule is skipped.
 - **No filing registry.** The mailbox is the record: the **Claude Auto** category marks an email as already processed, `_SYNCRO ALERTS` holds reminder history, and each Daily Briefing Summary email is the audit trail. Do not write a registry file — scheduled runs start in a fresh workspace, so it would not persist.
 - Always include the filing summary footer so the user can verify what was processed and spot any errors. Report counts by rule.
 - **The briefing reports; it does not advise.** Action needed carries recorded facts only — no consequences, no recommendations, no speculation. WiFi Impersonation and IP Address Conflict alerts are informational: customer names only, never analysed, never actionable.
+- **Calendar writes happen only in Step 4.5.** The briefing creates entries for Unifi controller activity, checks for duplicates first, and never sends an invitation. No other step writes to the calendar.
 - The extended 7-day lookback (Step 3.5) is **Inbox only** and read-only — it never triggers new filing actions.
 - The briefing also carries **Unifi alerts** (8-hour window, from the `anthropic-skills:unifi-alerts` skill, which owns its own folder location) and a **Syncro ticket list** (new in the last 10 hours, plus every ticket in Customer Reply status regardless of age, pulled from the **Syncro API**, not from mail). Step 7 reconciles the API pull against the `__SYNCRO ALERTS` folder and reports any gap as a footer disclaimer.
 - The summary (step 5) is created as a draft and moved to Inbox. It is **never sent** — no `outlook_send_mail` call at any point. The only address used is alex@westmaintech.com.
@@ -42,7 +43,7 @@ outlook_email_search(folderName="Inbox", afterDateTime="2 days ago", limit=25)
 
 **_SYNCRO ALERTS** — last 2 days, read directly by folder ID (`read_resource` with `mail:///folders/{folderId}`, paginating if needed). Used for Rule 1 reminder counts and Step 7 verification.
 
-**Unifi alerts** — invoke `anthropic-skills:unifi-alerts` with the Skill tool, window **8 hours**, using the skill's default folder (_TO REVIEW > _ALERTS > CloudUnifi). Collect device offline/reconnect pairs, reboots, firmware updates and security alerts, grouped by customer site. Pair each offline with its matching reconnect so a resolved blip is reported once, as resolved.
+**Unifi alerts** — invoke `anthropic-skills:unifi-alerts` with the Skill tool, window **8 hours**, using the skill's default folder (_TO REVIEW > _ALERTS > CloudUnifi). Collect device offline/reconnect pairs, reboots, firmware updates and security alerts, grouped by customer site. Pair each offline with its matching reconnect so a resolved blip is reported once, as resolved. Also collect **controller activity** — config created/modified/removed, network accessed, device adopted, device ready for adoption — keeping each event's **site** and **exact timestamp**, since Step 4.5 turns these into calendar entries.
 
 **Syncro tickets** — pull from the **Syncro API**, not from mail. Read-only; this files nothing. Make **two** calls and merge the results, de-duplicating by ticket `number`:
 
@@ -149,6 +150,9 @@ List **customer names only**, one line per type, with a count. No device names, 
 `ℹ️ WiFi Impersonation (4): MMC-Kenny Home, Andochick, Fordham Lee Distillery, ValleySchool`
 `ℹ️ IP Address Conflict (2): 24/7 Dance Studio, WSA Urbana`
 Omit a line when that type had none.
+
+*📆 Logged to calendar* — what Step 4.5 created this run, one line each: `h:mm AM/PM — <Site> (N events)`. Facts only — no comment on what the activity was for. Name separately any block skipped for a missing timestamp, any entry that failed to create, and any block left uncreated by the 10-entry cap.
+If every block was already on the calendar: "Config activity already logged." If nothing qualified, omit the group.
 
 **🎫 Open Syncro Tickets** *(new in last 10 hours, plus all Customer Reply)*
 Full inventory from the Step 1 API pull, grouped by customer, customer name bolded on its own line, then one bullet per ticket: `#XXXXX — Subject (Type · Time · Status)`. Append any Step 1 flag in brackets — `[customer waiting]`, `[urgent]`, `[new 3h, unassigned]`. Add an indented `↳ Update:` line for any ticket with activity since it was opened.
@@ -286,6 +290,41 @@ Apply filing rules to recurring automated senders using **email-first, rule-orde
 | Deleted Items (soft) | 11 |
 | Untouched | 12 |
 
+### 4.5 Log Unifi config activity to the calendar
+
+Creates a calendar entry for each block of Unifi controller activity found in Step 1, so admin time is recorded against the customer it belongs to. Runs after Step 4, before Step 7.
+
+**In scope** — events meaning a person was working in the controller: `Config Created`, `Config Modified`, `Config Removed`, `Network Accessed`, `Device Adopted`, `Device Ready for Adoption`, and any other event describing an administrative action taken in the controller.
+
+**Out of scope** — events that happen with nobody there: device offline / reconnect / restart, `Device Updated` and other automatic firmware pushes, `WiFi Impersonation Detected`, `Device IP Address Conflict`.
+
+**Building the blocks:**
+
+1. Take every in-scope event from the Step 1 Unifi pull with its site and its exact timestamp. If an event carries no timestamp, **do not guess one** — skip it and name it in the briefing.
+2. **Group by site.** One site's events never merge with another's, even in the same minute: a 3:44–3:48 PM burst across four sites is **four** entries, each starting at that site's own first event.
+3. Within a site, sort by time and split into blocks. Start a block at the first event and keep adding events while each is **2 hours or less after the previous event in that block**. The moment a gap exceeds 2 hours, close the block and start a new one. The test is the gap between *consecutive* events, not the distance from the block's first event.
+4. Each block becomes one entry: **start = the block's first event time, duration = 30 minutes**, however long the block itself spans.
+
+**Check for duplicates before creating anything.** One search covers the whole run:
+
+```
+outlook_calendar_search(query="Unifi config activity", afterDateTime=<window start>, beforeDateTime=<run time>, limit=25)
+```
+
+Paginate if `nextOffset` comes back. Build the set of (site, start time) already on the calendar and drop any block that matches one. The 8-hour window and the 8-hour run cadence overlap at the boundaries, and a manual re-run repeats the window outright, so without this check the same work is logged twice.
+
+**Create each surviving block** with `outlook_create_event`:
+
+- `subject`: `<Site> - Unifi config activity`, the site name exactly as the alert gives it so it matches the customer naming already on the calendar.
+- `start` / `end`: the block's first event time and 30 minutes later, `timeZone: "America/New_York"`.
+- `showAs`: `"busy"`.
+- `body`: one line per event in the block — `h:mm AM/PM — event type` — then the marker line `[auto: unifi-config]`.
+- No attendees, ever. An attendee list sends invitations.
+
+**Cap: at most 10 entries per run.** If more blocks qualify, create the 10 earliest and list the rest in the briefing as not created — a run trying to write dozens of entries is more likely a data problem than a real day's work.
+
+**On failure:** do not retry a failed create in the same run. Record the site and time in the briefing and move on; the next run's duplicate check will find the entry missing and create it then.
+
 ### 5. Create Summary Email and Deliver to Inbox
 
 Runs **last**, after Steps 4, 7, 3.5 and 3. Create the briefing as a message and place it directly in Inbox — created as a draft and then relocated into Inbox, never sent over the network.
@@ -419,6 +458,10 @@ Device events:
 ⚠️ Palmer Animal Hospital — device offline 6:02 AM, no reconnect — see Action needed
 ℹ️ WiFi Impersonation (4): MMC-Kenny Home, Andochick, Fordham Lee Distillery, ValleySchool
 ℹ️ IP Address Conflict (2): 24/7 Dance Studio, WSA Urbana
+Logged to calendar:
+📆 1:21 PM — PMC Hagerstown (3 events)
+📆 3:44 PM — Friends Martinsburg (5 events)
+📆 3:44 PM — NANV TYSONS (2 events)
 
 🎫 Open Syncro Tickets (new in last 10 hours, plus all Customer Reply)
 MMC - Mallick Mechanical Contractors
