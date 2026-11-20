@@ -43,7 +43,7 @@ outlook_email_search(folderName="Inbox", afterDateTime="2 days ago", limit=25)
 
 **_SYNCRO ALERTS** — last 2 days, read directly by folder ID (`read_resource` with `mail:///folders/{folderId}`, paginating if needed). Used for Rule 1 reminder counts and Step 7 verification.
 
-**Unifi alerts** — invoke `anthropic-skills:unifi-alerts` with the Skill tool, window **8 hours**, using the skill's default folder (_TO REVIEW > _ALERTS > CloudUnifi). Collect device offline/reconnect pairs, reboots, firmware updates and security alerts, grouped by customer site. Pair each offline with its matching reconnect so a resolved blip is reported once, as resolved. Also collect **controller activity** — config created/modified/removed, network accessed, device adopted, device ready for adoption — keeping each event's **site** and **exact timestamp**, since Step 4.5 turns these into calendar entries.
+**Unifi alerts** — invoke `anthropic-skills:unifi-alerts` with the Skill tool, window **8 hours**, using the skill's default folder (_TO REVIEW > _ALERTS > CloudUnifi). Collect device offline/reconnect pairs, reboots, firmware updates and security alerts, grouped by customer site. Pair each offline with its matching reconnect so a resolved blip is reported once, as resolved. Also collect **controller activity** — config created/modified/removed, network accessed, device adopted, device ready for adoption — keeping each event's **site** and its **received time** — the alert body's `Time:` line is unreliable, see Step 4.5 — since Step 4.5 turns these into calendar entries.
 
 **Syncro tickets** — pull from the **Syncro API**, not from mail. Read-only; this files nothing. Make **two** calls and merge the results, de-duplicating by ticket `number`:
 
@@ -300,7 +300,7 @@ Creates a calendar entry for each block of Unifi controller activity found in St
 
 **Building the blocks:**
 
-1. Take every in-scope event from the Step 1 Unifi pull with its site and its exact timestamp. If an event carries no timestamp, **do not guess one** — skip it and name it in the briefing.
+1. Take every in-scope event from the Step 1 Unifi pull with its site and its timestamp. **Use the alert email's received time converted to America/New_York — never the `Time:` line in the alert body.** That body field is not consistent between sites: some emit Eastern time and some emit UTC, so a Friends Martinsburg event that happened at 3:46 PM ET prints `8:46 PM` in its own body while a Default-TESTING event the same minute prints `3:46 PM`. Received time is the only anchor that holds across every site. If an event has no usable received time, **do not guess one** — skip it and name it in the briefing.
 2. **Group by site.** One site's events never merge with another's, even in the same minute: a 3:44–3:48 PM burst across four sites is **four** entries, each starting at that site's own first event.
 3. Within a site, sort by time and split into blocks. Start a block at the first event and keep adding events while each is **2 hours or less after the previous event in that block**. The moment a gap exceeds 2 hours, close the block and start a new one. The test is the gap between *consecutive* events, not the distance from the block's first event.
 4. Each block becomes one entry: **start = the block's first event time, duration = 30 minutes**, however long the block itself spans.
