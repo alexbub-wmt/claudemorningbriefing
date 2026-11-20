@@ -308,14 +308,14 @@ Creates a calendar entry for each block of Unifi controller activity found in St
 **Check for duplicates before creating anything.** One search covers the whole run:
 
 ```
-outlook_calendar_search(query="Unifi config activity", afterDateTime=<window start>, beforeDateTime=<run time>, limit=25)
+outlook_calendar_search(query="AI-UNIFI", afterDateTime=<window start>, beforeDateTime=<run time>, limit=25)
 ```
 
 Paginate if `nextOffset` comes back. Build the set of (site, start time) already on the calendar and drop any block that matches one. The 8-hour window and the 8-hour run cadence overlap at the boundaries, and a manual re-run repeats the window outright, so without this check the same work is logged twice.
 
 **Create each surviving block** with `outlook_create_event`:
 
-- `subject`: `<Site> - Unifi config activity`, the site name exactly as the alert gives it so it matches the customer naming already on the calendar.
+- `subject`: `AI-UNIFI-<Site> - Unifi config activity`. Always the literal prefix **`AI-UNIFI-`**, then the site name exactly as the alert gives it, then the description. The prefix is not optional: it marks the entry as machine-created so these can be found, filtered and told apart from time logged by hand.
 - `start` / `end`: the block's first event time and 30 minutes later, `timeZone: "America/New_York"`.
 - `showAs`: `"busy"`.
 - `body`: one line per event in the block — `h:mm AM/PM — event type` — then the marker line `[auto: unifi-config]`.
